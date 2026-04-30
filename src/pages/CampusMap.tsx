@@ -33,7 +33,7 @@ export default function CampusMap() {
   const dataSourcesRef = useRef<Record<string, Cesium.GeoJsonDataSource>>({});
   const loadingRef = useRef<Set<string>>(new Set());
   const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>({});
-  const [selected, setSelected] = useState<{ name: string; props: Record<string, any> } | null>(null);
+  const [selected, setSelected] = useState<{ name: string; props: Record<string, any>; layerId?: string; layerName?: string } | null>(null);
   const [search, setSearch] = useState("");
   const [campusBbox, setCampusBbox] = useState<[number, number, number, number] | null>(null);
 
