@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Layers, MapPin, Maximize2, Building2, Search, QrCode, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
 
-// No Cesium Ion token — use OSM imagery
+// Tell Cesium where its static assets (Workers, Widgets, Assets, ThirdParty) live.
+// We copied them into /public/cesium so they are served by Vite at /cesium/*.
+(window as any).CESIUM_BASE_URL = "/cesium/";
+// No Cesium Ion token — use OSM-style basemap
 Cesium.Ion.defaultAccessToken = "";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
