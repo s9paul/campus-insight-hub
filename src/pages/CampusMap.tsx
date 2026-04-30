@@ -53,9 +53,10 @@ export default function CampusMap() {
       fullscreenButton: false,
       infoBox: false,
       selectionIndicator: false,
-      imageryProvider: new Cesium.OpenStreetMapImageryProvider({
-        url: "https://tile.openstreetmap.org/",
-      }),
+      baseLayer: Cesium.ImageryLayer.fromProviderAsync(
+        Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })),
+        {}
+      ),
     });
 
     viewer.scene.globe.enableLighting = false;
