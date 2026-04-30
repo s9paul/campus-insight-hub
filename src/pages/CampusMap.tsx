@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
+import "cesium/Build/Cesium/Widgets/widgets.css";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
