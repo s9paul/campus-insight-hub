@@ -86,7 +86,14 @@ export default function CampusMap() {
       infoBox: false,
       selectionIndicator: false,
       baseLayer: Cesium.ImageryLayer.fromProviderAsync(
-        Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })),
+        Promise.resolve(
+          new Cesium.UrlTemplateImageryProvider({
+            url: "https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+            subdomains: ["a", "b", "c", "d"],
+            credit: "© OpenStreetMap contributors © CARTO",
+            maximumLevel: 19,
+          })
+        ),
         {}
       ),
     });
