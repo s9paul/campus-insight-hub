@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
+import "cesium/Build/Cesium/Widgets/widgets.css";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -11,7 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Layers, MapPin, Maximize2, Building2, Search, QrCode, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
 
-// No Cesium Ion token — use OSM imagery
+// Tell Cesium where its static assets (Workers, Widgets, Assets, ThirdParty) live.
+// We copied them into /public/cesium so they are served by Vite at /cesium/*.
+(window as any).CESIUM_BASE_URL = "/cesium/";
+// No Cesium Ion token — use OSM-style basemap
 Cesium.Ion.defaultAccessToken = "";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -86,7 +90,14 @@ export default function CampusMap() {
       infoBox: false,
       selectionIndicator: false,
       baseLayer: Cesium.ImageryLayer.fromProviderAsync(
-        Promise.resolve(new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })),
+        Promise.resolve(
+          new Cesium.UrlTemplateImageryProvider({
+            url: "https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+            subdomains: ["a", "b", "c", "d"],
+            credit: "© OpenStreetMap contributors © CARTO",
+            maximumLevel: 19,
+          })
+        ),
         {}
       ),
     });
