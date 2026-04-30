@@ -14,16 +14,334 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      assets: {
+        Row: {
+          asset_code: string | null
+          category: string
+          created_at: string
+          id: string
+          install_date: string | null
+          last_maintenance: string | null
+          latitude: number | null
+          location_name: string | null
+          longitude: number | null
+          metadata: Json
+          name: string
+          next_maintenance: string | null
+          status: Database["public"]["Enums"]["asset_status"]
+          subcategory: string | null
+          updated_at: string
+        }
+        Insert: {
+          asset_code?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          install_date?: string | null
+          last_maintenance?: string | null
+          latitude?: number | null
+          location_name?: string | null
+          longitude?: number | null
+          metadata?: Json
+          name: string
+          next_maintenance?: string | null
+          status?: Database["public"]["Enums"]["asset_status"]
+          subcategory?: string | null
+          updated_at?: string
+        }
+        Update: {
+          asset_code?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          install_date?: string | null
+          last_maintenance?: string | null
+          latitude?: number | null
+          location_name?: string | null
+          longitude?: number | null
+          metadata?: Json
+          name?: string
+          next_maintenance?: string | null
+          status?: Database["public"]["Enums"]["asset_status"]
+          subcategory?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      gis_features: {
+        Row: {
+          created_at: string
+          geometry: Json
+          id: string
+          layer_id: string
+          name: string | null
+          properties: Json
+        }
+        Insert: {
+          created_at?: string
+          geometry: Json
+          id?: string
+          layer_id: string
+          name?: string | null
+          properties?: Json
+        }
+        Update: {
+          created_at?: string
+          geometry?: Json
+          id?: string
+          layer_id?: string
+          name?: string | null
+          properties?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gis_features_layer_id_fkey"
+            columns: ["layer_id"]
+            isOneToOne: false
+            referencedRelation: "gis_layers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gis_layers: {
+        Row: {
+          category: string
+          color: string
+          created_at: string
+          description: string | null
+          feature_count: number
+          geometry_type: string
+          icon: string | null
+          id: string
+          name: string
+          updated_at: string
+          visible_by_default: boolean
+        }
+        Insert: {
+          category: string
+          color?: string
+          created_at?: string
+          description?: string | null
+          feature_count?: number
+          geometry_type: string
+          icon?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          visible_by_default?: boolean
+        }
+        Update: {
+          category?: string
+          color?: string
+          created_at?: string
+          description?: string | null
+          feature_count?: number
+          geometry_type?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          visible_by_default?: boolean
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sensor_readings: {
+        Row: {
+          id: number
+          recorded_at: string
+          sensor_id: string
+          value: number
+        }
+        Insert: {
+          id?: number
+          recorded_at?: string
+          sensor_id: string
+          value: number
+        }
+        Update: {
+          id?: number
+          recorded_at?: string
+          sensor_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sensor_readings_sensor_id_fkey"
+            columns: ["sensor_id"]
+            isOneToOne: false
+            referencedRelation: "sensors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sensors: {
+        Row: {
+          asset_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          latitude: number | null
+          longitude: number | null
+          name: string
+          sensor_type: string
+          unit: string | null
+        }
+        Insert: {
+          asset_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          sensor_type: string
+          unit?: string | null
+        }
+        Update: {
+          asset_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          sensor_type?: string
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sensors_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      work_orders: {
+        Row: {
+          asset_id: string | null
+          assigned_to: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          order_number: string
+          priority: Database["public"]["Enums"]["work_order_priority"]
+          status: Database["public"]["Enums"]["work_order_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          order_number?: string
+          priority?: Database["public"]["Enums"]["work_order_priority"]
+          status?: Database["public"]["Enums"]["work_order_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          order_number?: string
+          priority?: Database["public"]["Enums"]["work_order_priority"]
+          status?: Database["public"]["Enums"]["work_order_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_orders_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "facility_manager" | "maintenance" | "viewer"
+      asset_status: "operational" | "maintenance" | "offline" | "decommissioned"
+      work_order_priority: "low" | "medium" | "high" | "critical"
+      work_order_status:
+        | "open"
+        | "in_progress"
+        | "on_hold"
+        | "completed"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +468,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "facility_manager", "maintenance", "viewer"],
+      asset_status: ["operational", "maintenance", "offline", "decommissioned"],
+      work_order_priority: ["low", "medium", "high", "critical"],
+      work_order_status: [
+        "open",
+        "in_progress",
+        "on_hold",
+        "completed",
+        "cancelled",
+      ],
+    },
   },
 } as const
