@@ -105,6 +105,7 @@ export type Database = {
       }
       gis_layers: {
         Row: {
+          bbox: Json | null
           category: string
           color: string
           created_at: string
@@ -114,10 +115,13 @@ export type Database = {
           icon: string | null
           id: string
           name: string
+          source_file: string | null
+          storage_path: string | null
           updated_at: string
           visible_by_default: boolean
         }
         Insert: {
+          bbox?: Json | null
           category: string
           color?: string
           created_at?: string
@@ -127,10 +131,13 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
+          source_file?: string | null
+          storage_path?: string | null
           updated_at?: string
           visible_by_default?: boolean
         }
         Update: {
+          bbox?: Json | null
           category?: string
           color?: string
           created_at?: string
@@ -140,6 +147,8 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
+          source_file?: string | null
+          storage_path?: string | null
           updated_at?: string
           visible_by_default?: boolean
         }
