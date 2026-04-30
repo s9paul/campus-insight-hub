@@ -156,9 +156,12 @@ export default function CampusMap() {
         })
           .then((src) => {
             (src as any)._layerName = l.name;
-            // Tag entities with layer name for click info
+            (src as any)._layerId = l.id;
+            // Tag entities with layer info for click handler
             for (const e of src.entities.values) {
               if (!e.name) e.name = l.name;
+              (e as any)._layerId = l.id;
+              (e as any)._layerName = l.name;
             }
             dataSourcesRef.current[l.id] = src;
             viewer.dataSources.add(src);
