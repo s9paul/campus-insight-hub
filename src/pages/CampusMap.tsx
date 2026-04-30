@@ -8,7 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Layers, MapPin, Maximize2, Building2, Search } from "lucide-react";
+import { Layers, MapPin, Maximize2, Building2, Search, QrCode, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 
 // No Cesium Ion token — use OSM imagery
 Cesium.Ion.defaultAccessToken = "";
@@ -33,7 +34,7 @@ export default function CampusMap() {
   const dataSourcesRef = useRef<Record<string, Cesium.GeoJsonDataSource>>({});
   const loadingRef = useRef<Set<string>>(new Set());
   const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>({});
-  const [selected, setSelected] = useState<{ name: string; props: Record<string, any> } | null>(null);
+  const [selected, setSelected] = useState<{ name: string; props: Record<string, any>; layerId?: string; layerName?: string } | null>(null);
   const [search, setSearch] = useState("");
   const [campusBbox, setCampusBbox] = useState<[number, number, number, number] | null>(null);
 
@@ -100,7 +101,12 @@ export default function CampusMap() {
       if (Cesium.defined(picked) && picked.id instanceof Cesium.Entity) {
         const e = picked.id as any;
         const props = e.properties?.getValue?.(Cesium.JulianDate.now()) ?? {};
-        setSelected({ name: e.name ?? "Feature", props });
+        setSelected({
+          name: e.name ?? "Feature",
+          props,
+          layerId: e._layerId,
+          layerName: e._layerName,
+        });
       } else {
         setSelected(null);
       }
@@ -156,9 +162,12 @@ export default function CampusMap() {
         })
           .then((src) => {
             (src as any)._layerName = l.name;
-            // Tag entities with layer name for click info
+            (src as any)._layerId = l.id;
+            // Tag entities with layer info for click handler
             for (const e of src.entities.values) {
               if (!e.name) e.name = l.name;
+              (e as any)._layerId = l.id;
+              (e as any)._layerName = l.name;
             }
             dataSourcesRef.current[l.id] = src;
             viewer.dataSources.add(src);
@@ -340,25 +349,10 @@ export default function CampusMap() {
         </div>
 
         {selected && (
-          <Card className="absolute bottom-6 left-6 w-80 p-4 shadow-elegant animate-fade-in max-h-[60vh] overflow-auto">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="size-8 rounded-md gradient-primary grid place-items-center">
-                <Building2 className="size-4 text-primary-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold truncate">{selected.name}</div>
-                <div className="text-[11px] text-muted-foreground">Feature details</div>
-              </div>
-            </div>
-            <div className="space-y-1.5 text-xs mt-3">
-              {Object.entries(selected.props).filter(([k]) => !k.startsWith("_")).map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{k}</span>
-                  <span className="font-medium text-right truncate max-w-[60%]">{String(v ?? "—")}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
+          <SelectedFeatureCard
+            selected={selected}
+            onClose={() => setSelected(null)}
+          />
         )}
 
         <Card className="absolute bottom-6 right-6 px-3 py-2 shadow-elegant">
@@ -371,5 +365,124 @@ export default function CampusMap() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function SelectedFeatureCard({
+  selected,
+  onClose,
+}: {
+  selected: { name: string; props: Record<string, any>; layerId?: string; layerName?: string };
+  onClose: () => void;
+}) {
+  // Look up assets linked to this layer; if the picked feature has an id-like
+  // property and any asset has feature_ref matching it, prefer those.
+  const linked = useQuery({
+    queryKey: ["linked-assets", selected.layerId, selected.props],
+    enabled: !!selected.layerId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("assets")
+        .select("id, asset_code, name, status, tag_code, feature_ref")
+        .eq("layer_id", selected.layerId!);
+      const all = data ?? [];
+      // Try to narrow by feature_ref against any property value of the picked feature
+      const propValues = new Set(
+        Object.values(selected.props ?? {})
+          .filter((v) => v !== null && v !== undefined)
+          .map((v) => String(v))
+      );
+      const narrowed = all.filter((a) => a.feature_ref && propValues.has(a.feature_ref));
+      return narrowed.length ? narrowed : all;
+    },
+  });
+
+  const props = Object.entries(selected.props).filter(([k]) => !k.startsWith("_"));
+
+  return (
+    <Card className="absolute bottom-6 left-6 w-96 p-4 shadow-elegant animate-fade-in max-h-[70vh] overflow-auto">
+      <div className="flex items-start gap-2 mb-2">
+        <div className="size-8 rounded-md gradient-primary grid place-items-center shrink-0">
+          <Building2 className="size-4 text-primary-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold truncate">{selected.name}</div>
+          <div className="text-[11px] text-muted-foreground truncate">
+            {selected.layerName ?? "Feature details"}
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground text-xs px-1"
+          aria-label="Close"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Linked assets */}
+      {selected.layerId && (
+        <div className="mt-3">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
+            Linked Assets {linked.data ? `(${linked.data.length})` : ""}
+          </div>
+          {linked.isLoading && <div className="text-xs text-muted-foreground">Loading…</div>}
+          {linked.data && linked.data.length === 0 && (
+            <div className="text-xs text-muted-foreground italic">No assets registered on this layer.</div>
+          )}
+          <div className="space-y-1.5">
+            {linked.data?.map((a) => (
+              <Link
+                key={a.id}
+                to={`/assets?asset=${a.id}`}
+                className="flex items-center gap-2 px-2 py-1.5 rounded border border-border hover:bg-muted hover:border-primary/50 transition-base group"
+              >
+                <span
+                  className={`size-2 rounded-full ${
+                    a.status === "operational"
+                      ? "bg-success"
+                      : a.status === "maintenance"
+                      ? "bg-warning"
+                      : a.status === "offline"
+                      ? "bg-destructive"
+                      : "bg-muted-foreground"
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate">{a.name}</div>
+                  <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                    <span className="font-mono">{a.asset_code}</span>
+                    {a.tag_code && (
+                      <span className="inline-flex items-center gap-0.5">
+                        <QrCode className="size-2.5" />
+                        {a.tag_code}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <ExternalLink className="size-3 text-muted-foreground group-hover:text-primary" />
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Raw feature properties */}
+      {props.length > 0 && (
+        <div className="mt-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
+            Feature Properties
+          </div>
+          <div className="space-y-1 text-xs">
+            {props.map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-2">
+                <span className="text-muted-foreground">{k}</span>
+                <span className="font-medium text-right truncate max-w-[60%]">{String(v ?? "—")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

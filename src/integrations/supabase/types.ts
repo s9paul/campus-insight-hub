@@ -19,10 +19,12 @@ export type Database = {
           asset_code: string | null
           category: string
           created_at: string
+          feature_ref: string | null
           id: string
           install_date: string | null
           last_maintenance: string | null
           latitude: number | null
+          layer_id: string | null
           location_name: string | null
           longitude: number | null
           metadata: Json
@@ -30,16 +32,19 @@ export type Database = {
           next_maintenance: string | null
           status: Database["public"]["Enums"]["asset_status"]
           subcategory: string | null
+          tag_code: string | null
           updated_at: string
         }
         Insert: {
           asset_code?: string | null
           category: string
           created_at?: string
+          feature_ref?: string | null
           id?: string
           install_date?: string | null
           last_maintenance?: string | null
           latitude?: number | null
+          layer_id?: string | null
           location_name?: string | null
           longitude?: number | null
           metadata?: Json
@@ -47,16 +52,19 @@ export type Database = {
           next_maintenance?: string | null
           status?: Database["public"]["Enums"]["asset_status"]
           subcategory?: string | null
+          tag_code?: string | null
           updated_at?: string
         }
         Update: {
           asset_code?: string | null
           category?: string
           created_at?: string
+          feature_ref?: string | null
           id?: string
           install_date?: string | null
           last_maintenance?: string | null
           latitude?: number | null
+          layer_id?: string | null
           location_name?: string | null
           longitude?: number | null
           metadata?: Json
@@ -64,9 +72,18 @@ export type Database = {
           next_maintenance?: string | null
           status?: Database["public"]["Enums"]["asset_status"]
           subcategory?: string | null
+          tag_code?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "assets_layer_id_fkey"
+            columns: ["layer_id"]
+            isOneToOne: false
+            referencedRelation: "gis_layers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gis_features: {
         Row: {
