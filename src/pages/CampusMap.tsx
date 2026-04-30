@@ -100,7 +100,12 @@ export default function CampusMap() {
       if (Cesium.defined(picked) && picked.id instanceof Cesium.Entity) {
         const e = picked.id as any;
         const props = e.properties?.getValue?.(Cesium.JulianDate.now()) ?? {};
-        setSelected({ name: e.name ?? "Feature", props });
+        setSelected({
+          name: e.name ?? "Feature",
+          props,
+          layerId: e._layerId,
+          layerName: e._layerName,
+        });
       } else {
         setSelected(null);
       }
