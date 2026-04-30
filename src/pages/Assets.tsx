@@ -3,8 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useState, useMemo } from "react";
-import { Search, Boxes } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Search, Boxes, QrCode, MapPin } from "lucide-react";
+import { useSearchParams, Link } from "react-router-dom";
 
 const statusTone: Record<string, string> = {
   operational: "bg-success/15 text-success border-success/30",
@@ -14,11 +15,19 @@ const statusTone: Record<string, string> = {
 };
 
 export default function Assets() {
-  const [q, setQ] = useState("");
+  const [params] = useSearchParams();
+  const focusId = params.get("asset");
+  const focusTag = params.get("tag");
+  const [q, setQ] = useState(focusTag ?? "");
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+
   const { data } = useQuery({
     queryKey: ["assets-list"],
     queryFn: async () => {
-      const { data } = await supabase.from("assets").select("*").order("asset_code");
+      const { data } = await supabase
+        .from("assets")
+        .select("*, gis_layers(name, category, color)")
+        .order("asset_code");
       return data ?? [];
     },
   });
@@ -27,9 +36,23 @@ export default function Assets() {
     const s = q.toLowerCase().trim();
     if (!s) return data ?? [];
     return (data ?? []).filter((a) =>
-      [a.name, a.asset_code, a.category, a.location_name].some((v) => String(v ?? "").toLowerCase().includes(s))
+      [a.name, a.asset_code, a.category, a.location_name, a.tag_code].some((v) =>
+        String(v ?? "").toLowerCase().includes(s)
+      )
     );
   }, [data, q]);
+
+  // Scroll & flash row when deep-linked
+  useEffect(() => {
+    if (!focusId || !data) return;
+    const el = rowRefs.current[focusId];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-primary");
+      const t = setTimeout(() => el.classList.remove("ring-2", "ring-primary"), 2400);
+      return () => clearTimeout(t);
+    }
+  }, [focusId, data]);
 
   return (
     <div className="p-8">
@@ -40,7 +63,7 @@ export default function Assets() {
         </div>
         <div className="relative">
           <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search assets…" className="pl-9 w-72" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input placeholder="Search code, tag, name…" className="pl-9 w-80" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
 
@@ -50,20 +73,53 @@ export default function Assets() {
             <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3 font-medium">Code</th>
+                <th className="text-left px-4 py-3 font-medium">Tag (QR/RFID)</th>
                 <th className="text-left px-4 py-3 font-medium">Name</th>
                 <th className="text-left px-4 py-3 font-medium">Category</th>
+                <th className="text-left px-4 py-3 font-medium">GIS Layer</th>
                 <th className="text-left px-4 py-3 font-medium">Location</th>
                 <th className="text-left px-4 py-3 font-medium">Status</th>
                 <th className="text-left px-4 py-3 font-medium">Next Maintenance</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((a) => (
-                <tr key={a.id} className="border-t border-border hover:bg-muted/30 transition-base">
+              {filtered.map((a: any) => (
+                <tr
+                  key={a.id}
+                  ref={(el) => (rowRefs.current[a.id] = el)}
+                  className="border-t border-border hover:bg-muted/30 transition-base"
+                >
                   <td className="px-4 py-3 font-mono text-xs">{a.asset_code}</td>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    {a.tag_code ? (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-muted">
+                        <QrCode className="size-3" />
+                        {a.tag_code}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-medium">{a.name}</td>
                   <td className="px-4 py-3 capitalize text-muted-foreground">{a.category}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{a.location_name ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    {a.gis_layers ? (
+                      <Link
+                        to="/map"
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      >
+                        <span className="size-2 rounded-sm" style={{ background: a.gis_layers.color }} />
+                        {a.gis_layers.name}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {a.location_name ? (
+                      <span className="inline-flex items-center gap-1"><MapPin className="size-3" />{a.location_name}</span>
+                    ) : "—"}
+                  </td>
                   <td className="px-4 py-3">
                     <Badge variant="outline" className={`capitalize ${statusTone[a.status] ?? ""}`}>{a.status}</Badge>
                   </td>
@@ -72,7 +128,7 @@ export default function Assets() {
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                     <Boxes className="size-8 mx-auto mb-2 opacity-40" />
                     No assets found.
                   </td>
