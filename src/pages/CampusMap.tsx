@@ -8,7 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Layers, MapPin, Maximize2, Building2, Search } from "lucide-react";
+import { Layers, MapPin, Maximize2, Building2, Search, QrCode, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 
 // No Cesium Ion token — use OSM imagery
 Cesium.Ion.defaultAccessToken = "";
