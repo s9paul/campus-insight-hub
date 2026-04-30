@@ -349,25 +349,10 @@ export default function CampusMap() {
         </div>
 
         {selected && (
-          <Card className="absolute bottom-6 left-6 w-80 p-4 shadow-elegant animate-fade-in max-h-[60vh] overflow-auto">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="size-8 rounded-md gradient-primary grid place-items-center">
-                <Building2 className="size-4 text-primary-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold truncate">{selected.name}</div>
-                <div className="text-[11px] text-muted-foreground">Feature details</div>
-              </div>
-            </div>
-            <div className="space-y-1.5 text-xs mt-3">
-              {Object.entries(selected.props).filter(([k]) => !k.startsWith("_")).map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">{k}</span>
-                  <span className="font-medium text-right truncate max-w-[60%]">{String(v ?? "—")}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
+          <SelectedFeatureCard
+            selected={selected}
+            onClose={() => setSelected(null)}
+          />
         )}
 
         <Card className="absolute bottom-6 right-6 px-3 py-2 shadow-elegant">
