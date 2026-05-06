@@ -1,0 +1,1 @@
+UPDATE public.gis_layers SET visible_by_default = false WHERE category = 'Electrical' AND name ILIKE '%Text%';
