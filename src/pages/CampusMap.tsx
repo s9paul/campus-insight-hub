@@ -90,8 +90,17 @@ function KeplerLoader() {
       dispatch(
         addDataToMap({
           datasets,
-          options: { centerMap: true, readOnly: false },
-          config: { mapStyle: { styleType: "dark" } },
+          options: { centerMap: false, readOnly: false },
+          config: {
+            mapStyle: { styleType: "dark" },
+            mapState: {
+              latitude: 22.3149,
+              longitude: 87.3105,
+              zoom: 14,
+              pitch: 0,
+              bearing: 0,
+            },
+          },
         }) as any
       );
     })();
