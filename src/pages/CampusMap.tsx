@@ -90,7 +90,7 @@ function KeplerLoader() {
       dispatch(
         addDataToMap({
           datasets,
-          option: { centerMap: true, readOnly: false },
+          options: { centerMap: true, readOnly: false },
           config: { mapStyle: { styleType: "dark" } },
         }) as any
       );
@@ -124,7 +124,7 @@ function KeplerLoader() {
     dispatch(
       addDataToMap({
         datasets: [{ info: { label: "Assets", id: "assets" }, data }],
-        option: { centerMap: false, readOnly: false },
+        options: { centerMap: false, readOnly: false },
       }) as any
     );
   }, [assets.data, dispatch]);
