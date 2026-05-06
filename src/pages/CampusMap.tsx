@@ -1,53 +1,49 @@
-import { useEffect, useRef, useState } from "react";
-import * as Cesium from "cesium";
-import "cesium/Build/Cesium/Widgets/widgets.css";
+import { useEffect, useMemo, useState } from "react";
+import { Provider, useDispatch } from "react-redux";
+import { applyMiddleware, combineReducers, compose, createStore } from "redux";
+import { taskMiddleware } from "react-palm/tasks";
+import keplerGlReducer from "@kepler.gl/reducers";
+import KeplerGl from "@kepler.gl/components";
+import { addDataToMap } from "@kepler.gl/actions";
+import { processGeojson } from "@kepler.gl/processors";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Layers, MapPin, Maximize2, Building2, Search, QrCode, ExternalLink } from "lucide-react";
-import { Link } from "react-router-dom";
-
-// Tell Cesium where its static assets (Workers, Widgets, Assets, ThirdParty) live.
-// We copied them into /public/cesium so they are served by Vite at /cesium/*.
-(window as any).CESIUM_BASE_URL = "/cesium/";
-// No Cesium Ion token — use OSM-style basemap
-Cesium.Ion.defaultAccessToken = "";
+import { MapPin } from "lucide-react";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
+// Redux store for kepler.gl
+const reducers = combineReducers({
+  keplerGl: keplerGlReducer.initialState({
+    uiState: { currentModal: null, activeSidePanel: "layer" },
+  }),
+});
+const store = createStore(reducers, {}, compose(applyMiddleware(taskMiddleware)));
 
 type Layer = {
   id: string;
   name: string;
   category: string;
-  geometry_type: string;
   color: string;
   visible_by_default: boolean;
   feature_count: number;
   storage_path: string | null;
-  bbox: [number, number, number, number] | null;
 };
 
-export default function CampusMap() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<Cesium.Viewer | null>(null);
-  const dataSourcesRef = useRef<Record<string, Cesium.GeoJsonDataSource>>({});
-  const loadingRef = useRef<Set<string>>(new Set());
-  const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>({});
-  const [selected, setSelected] = useState<{ name: string; props: Record<string, any>; layerId?: string; layerName?: string } | null>(null);
-  const [search, setSearch] = useState("");
-  const [campusBbox, setCampusBbox] = useState<[number, number, number, number] | null>(null);
+function KeplerLoader() {
+  const dispatch = useDispatch();
+  const [loaded, setLoaded] = useState(0);
+  const [total, setTotal] = useState(0);
 
   const layers = useQuery({
     queryKey: ["gis-layers"],
     queryFn: async () => {
       const { data } = await supabase
         .from("gis_layers")
-        .select("id,name,category,geometry_type,color,visible_by_default,feature_count,storage_path,bbox")
+        .select("id,name,category,color,visible_by_default,feature_count,storage_path")
         .order("category")
         .order("name");
       return (data ?? []) as Layer[];
@@ -62,438 +58,126 @@ export default function CampusMap() {
     },
   });
 
-  // Compute combined campus bbox from all layers
-  useEffect(() => {
-    if (!layers.data?.length) return;
-    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-    for (const l of layers.data) {
-      if (!l.bbox) continue;
-      const [a, b, c, d] = l.bbox;
-      if (a < minx) minx = a; if (b < miny) miny = b;
-      if (c > maxx) maxx = c; if (d > maxy) maxy = d;
-    }
-    if (isFinite(minx)) setCampusBbox([minx, miny, maxx, maxy]);
-  }, [layers.data]);
-
-  // Init Cesium viewer
-  useEffect(() => {
-    if (!containerRef.current || viewerRef.current) return;
-    const viewer = new Cesium.Viewer(containerRef.current, {
-      baseLayerPicker: false,
-      geocoder: false,
-      homeButton: false,
-      sceneModePicker: false,
-      navigationHelpButton: false,
-      animation: false,
-      timeline: false,
-      fullscreenButton: false,
-      infoBox: false,
-      selectionIndicator: false,
-      baseLayer: Cesium.ImageryLayer.fromProviderAsync(
-        Promise.resolve(
-          new Cesium.UrlTemplateImageryProvider({
-            url: "https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
-            subdomains: ["a", "b", "c", "d"],
-            credit: "© OpenStreetMap contributors © CARTO",
-            maximumLevel: 19,
-          })
-        ),
-        {}
-      ),
-    });
-
-    viewer.scene.globe.enableLighting = false;
-    viewer.scene.skyAtmosphere.show = true;
-    viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0b1220");
-
-    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-    handler.setInputAction((click: any) => {
-      const picked = viewer.scene.pick(click.position);
-      if (Cesium.defined(picked) && picked.id instanceof Cesium.Entity) {
-        const e = picked.id as any;
-        const props = e.properties?.getValue?.(Cesium.JulianDate.now()) ?? {};
-        setSelected({
-          name: e.name ?? "Feature",
-          props,
-          layerId: e._layerId,
-          layerName: e._layerName,
-        });
-      } else {
-        setSelected(null);
-      }
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-    viewerRef.current = viewer;
-    return () => {
-      handler.destroy();
-      viewer.destroy();
-      viewerRef.current = null;
-    };
-  }, []);
-
-  // Fly to campus bbox once known
-  useEffect(() => {
-    const v = viewerRef.current;
-    if (!v || !campusBbox) return;
-    v.camera.flyTo({
-      destination: Cesium.Rectangle.fromDegrees(campusBbox[0], campusBbox[1], campusBbox[2], campusBbox[3]),
-      duration: 1.5,
-    });
-  }, [campusBbox]);
-
-  // Initialize active layers from defaults
+  // Load default-visible GIS layers into Kepler
   useEffect(() => {
     if (!layers.data) return;
-    setActiveLayers((prev) => {
-      const next = { ...prev };
-      for (const l of layers.data) if (next[l.id] === undefined) next[l.id] = l.visible_by_default;
-      return next;
-    });
-  }, [layers.data]);
+    const visible = layers.data.filter((l) => l.visible_by_default && l.storage_path);
+    if (!visible.length) return;
+    setTotal(visible.length);
+    let cancelled = false;
 
-  // React to active-layer changes: load/show/hide GeoJSON datasources
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || !layers.data) return;
-
-    for (const l of layers.data) {
-      const want = !!activeLayers[l.id];
-      const ds = dataSourcesRef.current[l.id];
-      if (want && !ds && !loadingRef.current.has(l.id) && l.storage_path) {
-        loadingRef.current.add(l.id);
-        const url = `${SUPABASE_URL}/storage/v1/object/public/gis-layers/${l.storage_path}`;
-        const color = Cesium.Color.fromCssColorString(l.color);
-        Cesium.GeoJsonDataSource.load(url, {
-          stroke: color,
-          fill: color.withAlpha(0.35),
-          strokeWidth: 2,
-          markerColor: color,
-          markerSize: 28,
-          clampToGround: true,
-        })
-          .then((src) => {
-            (src as any)._layerName = l.name;
-            (src as any)._layerId = l.id;
-            // Tag entities with layer info for click handler
-            for (const e of src.entities.values) {
-              if (!e.name) e.name = l.name;
-              (e as any)._layerId = l.id;
-              (e as any)._layerName = l.name;
-            }
-            dataSourcesRef.current[l.id] = src;
-            viewer.dataSources.add(src);
-            src.show = !!activeLayers[l.id];
-          })
-          .catch((err) => console.error("Layer load failed", l.name, err))
-          .finally(() => loadingRef.current.delete(l.id));
-      } else if (ds) {
-        ds.show = want;
+    (async () => {
+      const datasets: any[] = [];
+      for (const l of visible) {
+        try {
+          const url = `${SUPABASE_URL}/storage/v1/object/public/gis-layers/${l.storage_path}`;
+          const res = await fetch(url);
+          const geo = await res.json();
+          const data = processGeojson(geo);
+          if (data) {
+            datasets.push({
+              info: { label: l.name, id: l.id, color: hexToRgb(l.color) },
+              data,
+            });
+          }
+        } catch (e) {
+          console.error("layer load failed", l.name, e);
+        }
+        if (!cancelled) setLoaded((n) => n + 1);
       }
-    }
-  }, [activeLayers, layers.data]);
 
-  // Render assets as points
+      if (cancelled || !datasets.length) return;
+      dispatch(
+        addDataToMap({
+          datasets,
+          option: { centerMap: true, readOnly: false },
+          config: { mapStyle: { styleType: "dark" } },
+        }) as any
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [layers.data, dispatch]);
+
+  // Add assets as a points dataset
   useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || !assets.data) return;
-    const ids = viewer.entities.values.filter((e) => (e as any)._isAsset).map((e) => e.id);
-    ids.forEach((id) => viewer.entities.removeById(id));
-
-    for (const a of assets.data) {
-      if (a.longitude == null || a.latitude == null) continue;
-      const color =
-        a.status === "operational" ? Cesium.Color.fromCssColorString("#22c55e") :
-        a.status === "maintenance" ? Cesium.Color.fromCssColorString("#f59e0b") :
-        a.status === "offline" ? Cesium.Color.fromCssColorString("#ef4444") :
-        Cesium.Color.GRAY;
-      const e = viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(a.longitude, a.latitude, 5),
-        point: {
-          pixelSize: 12,
-          color,
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 2,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        },
-        label: {
-          text: a.asset_code ?? a.name,
-          font: "12px Inter, sans-serif",
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 2,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset: new Cesium.Cartesian2(0, -22),
-          showBackground: true,
-          backgroundColor: Cesium.Color.fromCssColorString("rgba(15,23,42,0.85)"),
-          backgroundPadding: new Cesium.Cartesian2(6, 4),
-          scale: 0.9,
-          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 4000),
-        },
-        name: a.name,
+    if (!assets.data?.length) return;
+    const features = assets.data
+      .filter((a: any) => a.longitude != null && a.latitude != null)
+      .map((a: any) => ({
+        type: "Feature",
         properties: {
-          "Asset Code": a.asset_code,
-          Category: a.category,
-          Status: a.status,
-          Location: a.location_name,
+          id: a.id,
+          name: a.name,
+          asset_code: a.asset_code,
+          category: a.category,
+          status: a.status,
+          tag_code: a.tag_code,
         },
-      });
-      (e as any)._isAsset = true;
-    }
-  }, [assets.data]);
-
-  function toggleLayer(id: string, on: boolean) {
-    setActiveLayers((p) => ({ ...p, [id]: on }));
-  }
-
-  function flyHome() {
-    const v = viewerRef.current;
-    if (!v) return;
-    if (campusBbox) {
-      v.camera.flyTo({
-        destination: Cesium.Rectangle.fromDegrees(campusBbox[0], campusBbox[1], campusBbox[2], campusBbox[3]),
-        duration: 1.2,
-      });
-    }
-  }
-
-  function flyToLayer(l: Layer) {
-    const v = viewerRef.current;
-    if (!v || !l.bbox) return;
-    v.camera.flyTo({
-      destination: Cesium.Rectangle.fromDegrees(l.bbox[0], l.bbox[1], l.bbox[2], l.bbox[3]),
-      duration: 1,
-    });
-  }
-
-  // Group + filter
-  const filtered = (layers.data ?? []).filter((l) =>
-    !search ? true : l.name.toLowerCase().includes(search.toLowerCase()) || l.category.toLowerCase().includes(search.toLowerCase())
-  );
-  const grouped = filtered.reduce<Record<string, Layer[]>>((acc, l) => {
-    (acc[l.category] ||= []).push(l);
-    return acc;
-  }, {});
-
-  const totalActive = Object.values(activeLayers).filter(Boolean).length;
-  const totalFeatures = (layers.data ?? []).filter((l) => activeLayers[l.id]).reduce((s, l) => s + l.feature_count, 0);
+        geometry: { type: "Point", coordinates: [a.longitude, a.latitude] },
+      }));
+    if (!features.length) return;
+    const data = processGeojson({ type: "FeatureCollection", features });
+    if (!data) return;
+    dispatch(
+      addDataToMap({
+        datasets: [{ info: { label: "Assets", id: "assets" }, data }],
+        option: { centerMap: false, readOnly: false },
+      }) as any
+    );
+  }, [assets.data, dispatch]);
 
   return (
-    <div className="h-screen flex">
-      {/* Layers panel */}
-      <div className="w-80 shrink-0 border-r border-border bg-card flex flex-col">
-        <div className="px-4 py-4 border-b border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <Layers className="size-4 text-primary" />
-            <div className="flex-1">
-              <div className="text-sm font-semibold">GIS Layers</div>
-              <div className="text-[11px] text-muted-foreground">
-                {layers.data?.length ?? 0} layers · {totalActive} on · {totalFeatures.toLocaleString()} features
-              </div>
-            </div>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search layers..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-7 text-xs"
-            />
-          </div>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="p-3 space-y-4">
-            {Object.entries(grouped).map(([cat, items]) => (
-              <div key={cat}>
-                <div className="flex items-center justify-between mb-1.5 px-1">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{cat}</div>
-                  <button
-                    onClick={() => {
-                      const allOn = items.every((l) => activeLayers[l.id]);
-                      setActiveLayers((p) => {
-                        const n = { ...p };
-                        for (const l of items) n[l.id] = !allOn;
-                        return n;
-                      });
-                    }}
-                    className="text-[10px] text-primary hover:underline"
-                  >
-                    {items.every((l) => activeLayers[l.id]) ? "none" : "all"}
-                  </button>
-                </div>
-                <div className="space-y-0.5">
-                  {items.map((l) => (
-                    <div key={l.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted transition-base group">
-                      <Checkbox checked={!!activeLayers[l.id]} onCheckedChange={(v) => toggleLayer(l.id, !!v)} />
-                      <span className="size-2.5 rounded-sm shrink-0" style={{ background: l.color }} />
-                      <button
-                        className="text-xs flex-1 truncate text-left hover:text-primary"
-                        onClick={() => flyToLayer(l)}
-                        title={`Fly to ${l.name}`}
-                      >
-                        {l.name.replace(`${l.category} - `, "")}
-                      </button>
-                      <span className="text-[10px] text-muted-foreground tabular-nums">{l.feature_count.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-            {!layers.data?.length && <p className="text-xs text-muted-foreground p-2">No layers yet.</p>}
-          </div>
-        </ScrollArea>
-      </div>
-
-      {/* Map */}
-      <div className="relative flex-1 min-w-0">
-        <div ref={containerRef} className="absolute inset-0" />
-
-        <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none">
-          <Card className="px-3 py-2 flex items-center gap-2 pointer-events-auto shadow-elegant">
-            <MapPin className="size-4 text-accent" />
-            <span className="text-xs font-medium">Campus Map</span>
-            <Badge variant="secondary" className="text-[10px]">3D · CesiumJS</Badge>
-          </Card>
-          <Button size="sm" variant="secondary" className="pointer-events-auto shadow-elegant" onClick={flyHome}>
-            <Maximize2 className="size-4" /> Reset View
-          </Button>
-        </div>
-
-        {selected && (
-          <SelectedFeatureCard
-            selected={selected}
-            onClose={() => setSelected(null)}
-          />
-        )}
-
-        <Card className="absolute bottom-6 right-6 px-3 py-2 shadow-elegant">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Asset Status</div>
-          <div className="flex flex-col gap-1 text-xs">
-            <div className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-success" /> Operational</div>
-            <div className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-warning" /> Maintenance</div>
-            <div className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-destructive" /> Offline</div>
-          </div>
+    <>
+      <div className="absolute top-4 left-4 z-10 pointer-events-none">
+        <Card className="px-3 py-2 flex items-center gap-2 pointer-events-auto shadow-elegant">
+          <MapPin className="size-4 text-accent" />
+          <span className="text-xs font-medium">Campus Map</span>
+          <Badge variant="secondary" className="text-[10px]">kepler.gl</Badge>
+          {total > 0 && loaded < total && (
+            <span className="text-[10px] text-muted-foreground">
+              loading {loaded}/{total} layers…
+            </span>
+          )}
         </Card>
       </div>
-    </div>
+    </>
   );
 }
 
-function SelectedFeatureCard({
-  selected,
-  onClose,
-}: {
-  selected: { name: string; props: Record<string, any>; layerId?: string; layerName?: string };
-  onClose: () => void;
-}) {
-  // Look up assets linked to this layer; if the picked feature has an id-like
-  // property and any asset has feature_ref matching it, prefer those.
-  const linked = useQuery({
-    queryKey: ["linked-assets", selected.layerId, selected.props],
-    enabled: !!selected.layerId,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("assets")
-        .select("id, asset_code, name, status, tag_code, feature_ref")
-        .eq("layer_id", selected.layerId!);
-      const all = data ?? [];
-      // Try to narrow by feature_ref against any property value of the picked feature
-      const propValues = new Set(
-        Object.values(selected.props ?? {})
-          .filter((v) => v !== null && v !== undefined)
-          .map((v) => String(v))
-      );
-      const narrowed = all.filter((a) => a.feature_ref && propValues.has(a.feature_ref));
-      return narrowed.length ? narrowed : all;
-    },
-  });
+function hexToRgb(hex: string): [number, number, number] {
+  const m = hex.replace("#", "");
+  const n = parseInt(m.length === 3 ? m.split("").map((c) => c + c).join("") : m, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 
-  const props = Object.entries(selected.props).filter(([k]) => !k.startsWith("_"));
+export default function CampusMap() {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const update = () => {
+      const el = document.getElementById("kepler-host");
+      if (el) setSize({ w: el.clientWidth, h: el.clientHeight });
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   return (
-    <Card className="absolute bottom-6 left-6 w-96 p-4 shadow-elegant animate-fade-in max-h-[70vh] overflow-auto">
-      <div className="flex items-start gap-2 mb-2">
-        <div className="size-8 rounded-md gradient-primary grid place-items-center shrink-0">
-          <Building2 className="size-4 text-primary-foreground" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold truncate">{selected.name}</div>
-          <div className="text-[11px] text-muted-foreground truncate">
-            {selected.layerName ?? "Feature details"}
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          className="text-muted-foreground hover:text-foreground text-xs px-1"
-          aria-label="Close"
-        >
-          ✕
-        </button>
+    <Provider store={store}>
+      <div id="kepler-host" className="relative h-screen w-full">
+        <KeplerLoader />
+        {size.w > 0 && (
+          <KeplerGl
+            id="campus"
+            mapboxApiAccessToken=""
+            width={size.w}
+            height={size.h}
+          />
+        )}
       </div>
-
-      {/* Linked assets */}
-      {selected.layerId && (
-        <div className="mt-3">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
-            Linked Assets {linked.data ? `(${linked.data.length})` : ""}
-          </div>
-          {linked.isLoading && <div className="text-xs text-muted-foreground">Loading…</div>}
-          {linked.data && linked.data.length === 0 && (
-            <div className="text-xs text-muted-foreground italic">No assets registered on this layer.</div>
-          )}
-          <div className="space-y-1.5">
-            {linked.data?.map((a) => (
-              <Link
-                key={a.id}
-                to={`/assets?asset=${a.id}`}
-                className="flex items-center gap-2 px-2 py-1.5 rounded border border-border hover:bg-muted hover:border-primary/50 transition-base group"
-              >
-                <span
-                  className={`size-2 rounded-full ${
-                    a.status === "operational"
-                      ? "bg-success"
-                      : a.status === "maintenance"
-                      ? "bg-warning"
-                      : a.status === "offline"
-                      ? "bg-destructive"
-                      : "bg-muted-foreground"
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium truncate">{a.name}</div>
-                  <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-                    <span className="font-mono">{a.asset_code}</span>
-                    {a.tag_code && (
-                      <span className="inline-flex items-center gap-0.5">
-                        <QrCode className="size-2.5" />
-                        {a.tag_code}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ExternalLink className="size-3 text-muted-foreground group-hover:text-primary" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Raw feature properties */}
-      {props.length > 0 && (
-        <div className="mt-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
-            Feature Properties
-          </div>
-          <div className="space-y-1 text-xs">
-            {props.map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-2">
-                <span className="text-muted-foreground">{k}</span>
-                <span className="font-medium text-right truncate max-w-[60%]">{String(v ?? "—")}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </Card>
+    </Provider>
   );
 }
